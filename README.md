@@ -95,3 +95,50 @@ docker run -d --name kostenko-assistant-final -p 5438:5438 -e APP_OWNER=kostenko
 ```
 
 Если порт занимает контейнер первого этапа, останови его командой `docker stop kostenko-assistant-1`. Ошибка `curl: not found` в HEALTHCHECK означает, что curl отсутствует внутри используемого образа: проверь успешность сборки и пересоздай контейнер из обновлённого образа.
+
+## Хранение данных
+
+Данные БД хранятся в Docker volume kostenko-pgdata.
+Было проверенно, что данные сохраняются при удалении и пересоздании контейнера PostgreSQL.
+
+Для изоляции сервисов используется сеть kostenko-backend.
+В ней ассистент подключается к контейнеру с БД kostenko-postgres.
+
+Создание volume и сети:
+
+```powershell
+docker volume create kostenko-pgdata
+docker network create kostenko-backend
+```
+
+Запуск БД:
+
+```powershell
+docker run -d `
+  --name kostenko-postgres `
+  --network kostenko-backend `
+  -e POSTGRES_USER=user_08 `
+  -e POSTGRES_PASSWORD=pgpass_08 `
+  -e POSTGRES_DB=kostenko08 `
+  -v kostenko-pgdata:/var/lib/postgresql/data `
+  postgres:15
+```
+
+Запуск ассистента:
+
+```powershell
+docker run -d `
+  --name kostenko-assistant `
+  --network kostenko-backend `
+  -p 8008:8008 `
+  -e APP_OWNER=kostenko `
+  -e APP_SECRET=secret08kostenko `
+  -e DATABASE_URL="postgresql://user_08:pgpass_08@kostenko-postgres:5432/kostenko08" `
+  -v "${PWD}\config:/app/config:ro" `
+  kostenko-assistant:v3
+```
+
+Проверка заметок:
+```powershell
+curl.exe http://localhost:8008/notes
+```
