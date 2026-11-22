@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kostenko-app-config
+data:
+  APP_OWNER: "kostenko"
+  CACHE_TTL: "120"
+  REDIS_URL: "redis://redis:6379/0"
+  DATABASE_URL: "postgresql://user_08:pgpass_08@db:5432/kostenko08"

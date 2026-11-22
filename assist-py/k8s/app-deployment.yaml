@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kostenko-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kostenko-app
+  template:
+    metadata:
+      labels:
+        app: kostenko-app
+    spec:
+      containers:
+        - name: app
+          image: kostenko-assist:lab5
+          ports:
+            - containerPort: 8008
+          envFrom:
+            - configMapRef:
+                name: kostenko-app-config
+            - secretRef:
+                name: kostenko-app-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 15
+            periodSeconds: 20
