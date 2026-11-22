@@ -16,7 +16,6 @@ from app.database import engine, get_db
 from app.models import Base
 
 logger = logging.getLogger("uvicorn.error")
-OWNER = os.getenv("APP_OWNER", "anonymous")
 SECRET_KEY = os.getenv("APP_SECRET", "default_secret")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CACHE_TTL = int(os.getenv("CACHE_TTL", "120"))
@@ -53,7 +52,7 @@ def meta() -> dict:
 
 @app.get("/")
 async def root():
-    return {"message": f"👋 Привет, {OWNER}!", "service": "personal-assistant", "version": "4.0", "endpoints": ["/me", "/notes", "/weather/{city}", "/secret/{key}", "/cache/stats"], **meta()}
+    return {"message": f"👋 Привет!", "service": "personal-assistant", "version": "4.0", "endpoints": ["/me", "/notes", "/weather/{city}", "/secret/{key}", "/cache/stats"], **meta()}
 
 
 @app.get("/health")
@@ -64,18 +63,18 @@ async def health():
             redis_ok = await redis_client.ping()
         except Exception:
             pass
-    return {"status": "healthy", "owner": OWNER, "redis": redis_ok, **meta()}
+    return {"status": "healthy", "redis": redis_ok, **meta()}
 
 
 @app.get("/me")
 async def me():
-    return {"owner": OWNER, "secret_prefix": SECRET_KEY[:6] if SECRET_KEY != "default_secret" else "NOT_SET"}
+    return {"secret_prefix": SECRET_KEY[:6] if SECRET_KEY != "default_secret" else "NOT_SET"}
 
 
 @app.get("/secret/{key}")
 async def secret(key: str):
     if key == SECRET_KEY:
-        return {"flag": f"LAB2_SUCCESS_{OWNER.upper()}", "message": "The secret key is correct!"}
+        return {"message": "The secret key is correct!"}
     return {"error": "The secret key is incorrect", "hint": "Check the APP_SECRET environment variable"}
 
 
@@ -83,7 +82,7 @@ WEATHER_CODES = {0: "☀️ Ясно", 1: "🌤 Малооблачно", 2: "⛅
 
 
 def cache_key(city: str) -> str:
-    return f"weather:{OWNER}:{city.strip().lower()}"
+    return f"weather:{city.strip().lower()}"
 
 
 @app.get("/weather/{city}")
@@ -103,7 +102,7 @@ async def weather(city: str):
                 return {"error": f"City «{city}» not found", **meta()}
             place = geo["results"][0]
             current = (await client.get("https://api.open-meteo.com/v1/forecast", params={"latitude": place["latitude"], "longitude": place["longitude"], "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code"})).json()["current"]
-            result = {"city": place.get("name", city), "country": place.get("country", ""), "coordinates": {"lat": place["latitude"], "lon": place["longitude"]}, "temperature_c": current["temperature_2m"], "humidity_pct": current["relative_humidity_2m"], "wind_km_h": current["wind_speed_10m"], "condition": WEATHER_CODES.get(current.get("weather_code", -1), "Unknown"), "owner": OWNER}
+            result = {"city": place.get("name", city), "country": place.get("country", ""), "coordinates": {"lat": place["latitude"], "lon": place["longitude"]}, "temperature_c": current["temperature_2m"], "humidity_pct": current["relative_humidity_2m"], "wind_km_h": current["wind_speed_10m"], "condition": WEATHER_CODES.get(current.get("weather_code", -1), "Unknown")}
             if redis_client:
                 await redis_client.setex(key, CACHE_TTL, json.dumps(result))
             return {**result, "source": "api", **meta()}
@@ -116,18 +115,18 @@ async def cache_stats():
     if not redis_client:
         return {"error": "Redis not available", **meta()}
     keys = []
-    async for key in redis_client.scan_iter(match=f"weather:{OWNER}:*"):
+    async for key in redis_client.scan_iter(match=f"weather:*"):
         keys.append({"key": key, "ttl_seconds": await redis_client.ttl(key)})
-    return {"owner": OWNER, "cache_ttl_setting": CACHE_TTL, "cached_cities": len(keys), "keys": keys, **meta()}
+    return {"cache_ttl_setting": CACHE_TTL, "cached_cities": len(keys), "keys": keys, **meta()}
 
 
 @app.post("/notes")
 async def create_note(note: NoteCreate, db: Session = Depends(get_db)):
-    saved = crud.create_note(db, note.text, OWNER)
-    return {"status": "saved", "note_id": saved.id, "owner": saved.owner, "text": saved.text[:50]}
+    saved = crud.create_note(db, note.text, os.getenv("APP_OWNER", "unknown"))
+    return {"status": "saved", "note_id": saved.id, "text": saved.text[:50]}
 
 
 @app.get("/notes")
 async def list_notes(db: Session = Depends(get_db)):
-    notes = crud.get_notes(db, OWNER)
-    return {"owner": OWNER, "count": len(notes), "notes": [{"id": note.id, "text": note.text, "owner": note.owner, "created_at": note.created_at.isoformat()} for note in notes]}
+    notes = crud.get_notes(db)
+    return {"count": len(notes), "notes": [{"id": note.id, "text": note.text, "created_at": note.created_at.isoformat()} for note in notes]}

@@ -142,3 +142,71 @@ docker run -d `
 ```powershell
 curl.exe http://localhost:8008/notes
 ```
+
+## Kubernetes (ЛР5)
+
+То же приложение (FastAPI + PostgreSQL + Redis), но развёрнутое в локальном кластере minikube вместо Docker Compose. Все манифесты лежат в `assist-py/k8s/`:
+
+```bash
+k8s/
+├── postgres-deployment.yaml
+├── postgres-service.yaml
+├── postgres-pvc.yaml
+├── redis-deployment.yaml
+├── redis-service.yaml
+├── app-configmap.yaml
+├── app-secret.yaml
+├── app-deployment.yaml
+└── app-service.yaml
+```
+
+### Порядок применения
+
+Сначала база и кэш, затем конфигурация приложения, последним — само приложение:
+
+```powershell
+cd .\assist-py
+
+# образ из ЛР4 должен быть виден кластеру
+minikube image load kostenko-assist:lab5
+
+# 1. хранилище и база данных
+kubectl apply -f k8s/postgres-pvc.yaml
+kubectl apply -f k8s/postgres-deployment.yaml
+kubectl apply -f k8s/postgres-service.yaml
+
+# 2. кэш
+kubectl apply -f k8s/redis-deployment.yaml
+kubectl apply -f k8s/redis-service.yaml
+
+# 3. конфигурация приложения
+kubectl apply -f k8s/app-configmap.yaml
+kubectl apply -f k8s/app-secret.yaml
+
+# 4. приложение и доступ к нему
+kubectl apply -f k8s/app-deployment.yaml
+kubectl apply -f k8s/app-service.yaml
+```
+
+### Проверка запуска
+
+```powershell
+# все поды должны быть в состоянии Running/Ready
+kubectl get pods
+
+# все ресурсы неймспейса
+kubectl get all
+
+# логи пода приложения
+kubectl logs -l app=kostenko-app
+
+# в Conditions должно быть Ready: True, видны readinessProbe и livenessProbe
+kubectl describe pod -l app=kostenko-app
+```
+
+Приложение открывается через NodePort 30088 (`minikube service app` или `minikube ip`):
+
+```powershell
+curl.exe http://$(minikube ip):30088/health
+curl.exe http://$(minikube ip):30088/weather/Moscow
+```
